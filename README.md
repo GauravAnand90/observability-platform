@@ -1,28 +1,44 @@
-Observability Platform
+# Observability Platform
+
 Production-grade observability platform demonstrating SRE and Platform Engineering practices.
 
-Tech Stack
-Prometheus
-Grafana
-AlertManager
-Docker Compose
-Architecture
-architecture/architecture.png
+## Tech Stack
 
-Features
-Metrics Collection
-Infrastructure Monitoring
-Alerting
-Dashboard Visualization
-Incident Detection
-Project Structure
+- Prometheus
+- Grafana
+- AlertManager
+- Docker Compose
+
+## Architecture
+
+![Architecture Diagram](architecture/architecture.png)
+
+## Features
+
+- Metrics Collection
+- Infrastructure Monitoring
+- Alerting
+- Dashboard Visualization
+- Incident Detection
+
+## Project Structure
+
+```text
 observability-platform
 ├── alertmanager
 ├── architecture
 ├── grafana
 ├── prometheus
 └── docker-compose.yml
-Deployment
+```
+
+## Deployment
+
+```bash
 docker-compose up -d
-Author
-Gaurav Anand  SRE / Platform Engineer
+```
+
+## Author
+
+**Gaurav Anand**  
+Senior SRE / Platform Engineer

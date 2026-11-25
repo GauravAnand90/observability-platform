@@ -12,7 +12,7 @@ OpenTelemetry can carry metrics as well as traces, and we could send everything 
 - **Traces use the OpenTelemetry SDK** and go over OTLP to an **OpenTelemetry Collector**, never straight to a backend. The app only knows the standard `OTEL_*` environment variables.
 - The **Collector** owns telemetry policy:
   - **Tail sampling** keeps 100% of error traces, 100% of traces over 300ms (the latency SLO threshold), and 10% of the rest.
-  - The **spanmetrics** and **servicegraph** connectors derive RED metrics and the service map from all spans *before* sampling, so they stay accurate.
+  - The **span_metrics** and **service_graph** connectors derive RED metrics and the service map from all spans *before* sampling, so they stay accurate.
 - **Tempo** stores traces. Grafana links metrics to traces (TraceQL panels on the RED dashboard, traces-to-metrics on the Tempo datasource).
 
 ## Consequences

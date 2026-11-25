@@ -18,7 +18,7 @@ scrape_configs:
     static_configs:
       - targets: [app:8080]
 
-  # RED metrics derived from traces by the Collector's spanmetrics connector.
+  # RED metrics derived from traces by the Collector's span_metrics connector.
   # Useful for services that are traced but not instrumented for Prometheus.
   - job_name: otel-spanmetrics
     static_configs:

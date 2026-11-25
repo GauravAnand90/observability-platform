@@ -3,7 +3,7 @@
 # and what metrics are derived from it are decided here, not in app code.
 #
 #   app/loadgen --OTLP--> receiver --> traces (tail-sampled)  --> Tempo
-#                                  \-> spanmetrics + servicegraph --> Prometheus (:8889)
+#                                  \-> span_metrics + service_graph --> Prometheus (:8889)
 
 extensions:
   health_check:
@@ -57,21 +57,21 @@ processors:
 connectors:
   # RED metrics computed from 100% of spans (before sampling), so they stay
   # accurate even though only a fraction of traces is stored.
-  spanmetrics:
+  span_metrics:
     histogram:
       explicit:
         buckets: [5ms, 10ms, 25ms, 50ms, 100ms, 200ms, 300ms, 500ms, 1s, 2.5s, 5s]
     metrics_flush_interval: 15s
 
   # Request/error/latency per edge between services; powers Grafana's service map.
-  servicegraph:
+  service_graph:
     latency_histogram_buckets: [5ms, 10ms, 25ms, 50ms, 100ms, 200ms, 300ms, 500ms, 1s, 2.5s, 5s]
     store:
       ttl: 10s
       max_items: 10000
 
 exporters:
-  otlp/tempo:
+  otlp_grpc/tempo:
     endpoint: tempo:4317
     tls:
       insecure: true
@@ -93,12 +93,12 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, resource, tail_sampling, batch]
-      exporters: [otlp/tempo]
+      exporters: [otlp_grpc/tempo]
     traces/derive-metrics:
       receivers: [otlp]
       processors: [memory_limiter, resource, batch]
-      exporters: [spanmetrics, servicegraph]
+      exporters: [span_metrics, service_graph]
     metrics/derived:
-      receivers: [spanmetrics, servicegraph]
+      receivers: [span_metrics, service_graph]
       processors: [batch]
       exporters: [prometheus]

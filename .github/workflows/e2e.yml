@@ -5,6 +5,8 @@ name: e2e
 # injected fault produces a real notification from Alertmanager.
 on:
   pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:

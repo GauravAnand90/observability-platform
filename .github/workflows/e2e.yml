@@ -1,0 +1,60 @@
+name: e2e
+
+# Boots the whole stack and proves the signal path end to end:
+# metrics reach Prometheus, SLO rules evaluate, traces reach Tempo, and an
+# injected fault produces a real notification from Alertmanager.
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: start stack
+        run: docker compose up -d --build
+
+      - name: wait for SLO recording rules
+        run: |
+          for i in $(seq 1 40); do
+            n=$(curl -fsS 'http://localhost:9090/api/v1/query?query=slo:sli_error:ratio_rate5m' | jq '.data.result | length' || echo 0)
+            echo "attempt $i: $n SLO series"
+            [ "$n" -ge 2 ] && exit 0
+            sleep 10
+          done
+          exit 1
+
+      - name: traces reach Tempo through the Collector
+        run: |
+          for i in $(seq 1 30); do
+            n=$(curl -fsS -G 'http://localhost:3200/api/search' --data-urlencode 'q={ resource.service.name = "checkout-api" }' --data-urlencode 'limit=5' | jq '.traces | length' || echo 0)
+            echo "attempt $i: $n traces"
+            [ "$n" -ge 1 ] && exit 0
+            sleep 10
+          done
+          exit 1
+
+      - name: injected fault pages through Alertmanager
+        run: |
+          curl -fsS -X POST 'http://localhost:8080/admin/fault?error_rate=0.5'
+          for i in $(seq 1 60); do
+            n=$(curl -fsS http://localhost:9095/alerts | jq '[.[] | select(.alertname == "SLOErrorBudgetBurnFast" and .status == "firing")] | length' || echo 0)
+            echo "attempt $i: $n page notifications"
+            [ "$n" -ge 1 ] && exit 0
+            sleep 10
+          done
+          exit 1
+
+      - name: logs on failure
+        if: failure()
+        run: docker compose logs --tail=100
+
+      - name: stop stack
+        if: always()
+        run: docker compose down -v

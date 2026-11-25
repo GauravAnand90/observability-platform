@@ -1,0 +1,55 @@
+# Routing policy: severity decides who is interrupted.
+#   page   -> on-call pager (wake someone up; the budget is going fast)
+#   ticket -> team queue (fix this week; no one gets woken up)
+#
+# Locally both receivers post to the alert-sink service (`make alerts` shows what
+# would have been sent). Real receiver blocks are at the bottom, commented out.
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: ticket-queue
+  group_by: [alertname, service, slo]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 12h
+  routes:
+    - matchers: [severity="page"]
+      receiver: pager
+      group_wait: 10s
+      repeat_interval: 1h
+    - matchers: [severity="ticket"]
+      receiver: ticket-queue
+
+# A fast burn already pages for the same SLO, so don't also open a ticket for it.
+inhibit_rules:
+  - source_matchers: [severity="page"]
+    target_matchers: [severity="ticket"]
+    equal: [service, slo]
+
+receivers:
+  - name: pager
+    webhook_configs:
+      - url: http://alert-sink:9095/alerts
+        send_resolved: true
+  - name: ticket-queue
+    webhook_configs:
+      - url: http://alert-sink:9095/alerts
+        send_resolved: true
+
+# Production equivalents (secrets come from files, never inline):
+#
+#  - name: pager
+#    pagerduty_configs:
+#      - routing_key_file: /etc/alertmanager/secrets/pagerduty_routing_key
+#        description: '{{ .CommonAnnotations.summary }}'
+#        links:
+#          - href: '{{ .CommonAnnotations.runbook_url }}'
+#            text: Runbook
+#  - name: ticket-queue
+#    slack_configs:
+#      - api_url_file: /etc/alertmanager/secrets/slack_webhook_url
+#        channel: '#checkout-alerts'
+#        title: '{{ .CommonAnnotations.summary }}'
+#        text: '{{ .CommonAnnotations.description }} <{{ .CommonAnnotations.runbook_url }}|Runbook>'

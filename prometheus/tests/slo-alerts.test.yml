@@ -1,0 +1,136 @@
+# promtool unit tests for the SLO rules: `make test-rules`.
+# Synthetic counters are fed in at 1-minute resolution and the alerts are
+# checked at known points in time, so threshold or PromQL mistakes fail CI
+# instead of failing silently in production.
+
+rule_files:
+  - ../rules/slo-recording.yml
+  - ../rules/slo-alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  # 2% errors = 20x burn rate for a 99.9% SLO: page and ticket both fire.
+  - name: availability fast burn pages
+    interval: 1m
+    input_series:
+      - series: 'http_requests_total{service="checkout-api",route="/api/checkout",method="POST",code="200"}'
+        values: '0+98x120'
+      - series: 'http_requests_total{service="checkout-api",route="/api/checkout",method="POST",code="502"}'
+        values: '0+2x120'
+    promql_expr_test:
+      - expr: slo:sli_error:ratio_rate5m{slo="checkout-availability"}
+        eval_time: 10m
+        exp_samples:
+          - labels: 'slo:sli_error:ratio_rate5m{service="checkout-api", slo="checkout-availability"}'
+            value: 0.02
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: SLOErrorBudgetBurnFast
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: checkout-api
+              slo: checkout-availability
+            exp_annotations:
+              summary: "checkout-availability: error budget is burning fast"
+              description: "The checkout-availability SLO of checkout-api is burning error budget at 14.4x (1h) or 6x (6h) the sustainable rate. At 14.4x the whole 30-day budget is gone in about 2 days."
+              runbook_url: "https://github.com/GauravAnand90/observability-platform/blob/main/docs/runbooks/slo-burn-fast.md"
+              dashboard_url: "http://localhost:3000/d/slo-overview?var-slo=checkout-availability"
+      - eval_time: 70m
+        alertname: SLOErrorBudgetBurnSlow
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              service: checkout-api
+              slo: checkout-availability
+            exp_annotations:
+              summary: "checkout-availability: error budget is burning steadily"
+              description: "The checkout-availability SLO of checkout-api is burning error budget at 3x (1d) or 1x (3d) the sustainable rate. Not urgent, but the budget will run out before the 30-day window ends."
+              runbook_url: "https://github.com/GauravAnand90/observability-platform/blob/main/docs/runbooks/slo-burn-slow.md"
+              dashboard_url: "http://localhost:3000/d/slo-overview?var-slo=checkout-availability"
+
+  # 0.05% errors is inside a 99.9% SLO: nothing fires.
+  - name: availability within budget stays quiet
+    interval: 1m
+    input_series:
+      - series: 'http_requests_total{service="checkout-api",route="/api/checkout",method="POST",code="200"}'
+        values: '0+1999x120'
+      - series: 'http_requests_total{service="checkout-api",route="/api/checkout",method="POST",code="502"}'
+        values: '0+1x120'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: SLOErrorBudgetBurnFast
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: SLOErrorBudgetBurnSlow
+        exp_alerts: []
+
+  # 0.5% errors = 5x burn: too slow to page, fast enough for a ticket.
+  - name: availability slow burn tickets but does not page
+    interval: 1m
+    input_series:
+      - series: 'http_requests_total{service="checkout-api",route="/api/checkout",method="POST",code="200"}'
+        values: '0+995x120'
+      - series: 'http_requests_total{service="checkout-api",route="/api/checkout",method="POST",code="502"}'
+        values: '0+5x120'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: SLOErrorBudgetBurnFast
+        exp_alerts: []
+      - eval_time: 70m
+        alertname: SLOErrorBudgetBurnSlow
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              service: checkout-api
+              slo: checkout-availability
+            exp_annotations:
+              summary: "checkout-availability: error budget is burning steadily"
+              description: "The checkout-availability SLO of checkout-api is burning error budget at 3x (1d) or 1x (3d) the sustainable rate. Not urgent, but the budget will run out before the 30-day window ends."
+              runbook_url: "https://github.com/GauravAnand90/observability-platform/blob/main/docs/runbooks/slo-burn-slow.md"
+              dashboard_url: "http://localhost:3000/d/slo-overview?var-slo=checkout-availability"
+
+  # 10% of requests slower than 300ms = 10x burn of a 99% latency SLO:
+  # below the 14.4x (1h) bar but above 6x (6h), so the fast alert still pages.
+  - name: latency burn pages through the 6h window
+    interval: 1m
+    input_series:
+      - series: 'http_request_duration_seconds_bucket{service="checkout-api",route="/api/checkout",le="0.3"}'
+        values: '0+90x120'
+      - series: 'http_request_duration_seconds_count{service="checkout-api",route="/api/checkout"}'
+        values: '0+100x120'
+    alert_rule_test:
+      - eval_time: 70m
+        alertname: SLOErrorBudgetBurnFast
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              service: checkout-api
+              slo: checkout-latency
+            exp_annotations:
+              summary: "checkout-latency: error budget is burning fast"
+              description: "The checkout-latency SLO of checkout-api is burning error budget at 14.4x (1h) or 6x (6h) the sustainable rate. At 14.4x the whole 30-day budget is gone in about 2 days."
+              runbook_url: "https://github.com/GauravAnand90/observability-platform/blob/main/docs/runbooks/slo-burn-fast.md"
+              dashboard_url: "http://localhost:3000/d/slo-overview?var-slo=checkout-latency"
+
+  - name: scrape failure pages
+    interval: 1m
+    input_series:
+      - series: 'up{job="checkout-api",instance="app:8080"}'
+        values: '0x10'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: CheckoutTargetDown
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: CheckoutTargetDown
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              job: checkout-api
+              instance: app:8080
+            exp_annotations:
+              summary: "Prometheus cannot scrape app:8080"
+              description: "Scrapes of checkout-api on app:8080 have failed for 2 minutes. SLO alerts for this service are blind until it's back."
+              runbook_url: "https://github.com/GauravAnand90/observability-platform/blob/main/docs/runbooks/target-down.md"

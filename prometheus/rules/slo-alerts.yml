@@ -1,0 +1,84 @@
+# Multi-window, multi-burn-rate SLO alerts (Google SRE Workbook, chapter 5).
+#
+# Generic over {service, slo}: every SLO defined in slo-recording.yml gets these
+# alerts with no extra rules. Thresholds assume a 30-day SLO window:
+#
+#   burn rate | long / short window | budget spent when it fires | action
+#   14.4x     | 1h  / 5m            | 2%                         | page
+#   6x        | 6h  / 30m           | 5%                         | page
+#   3x        | 1d  / 2h            | 10%                        | ticket
+#   1x        | 3d  / 6h            | 10%                        | ticket
+#
+# The long window proves the burn is significant; the short window (1/12 of the
+# long one) makes the alert stop quickly once the problem is fixed.
+
+groups:
+  - name: slo-burn-rate-alerts
+    rules:
+      - alert: SLOErrorBudgetBurnFast
+        expr: |
+          (
+            slo:sli_error:ratio_rate1h > on(service, slo) (14.4 * slo:error_budget:ratio)
+            and on(service, slo)
+            slo:sli_error:ratio_rate5m > on(service, slo) (14.4 * slo:error_budget:ratio)
+          )
+          or on(service, slo)
+          (
+            slo:sli_error:ratio_rate6h > on(service, slo) (6 * slo:error_budget:ratio)
+            and on(service, slo)
+            slo:sli_error:ratio_rate30m > on(service, slo) (6 * slo:error_budget:ratio)
+          )
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: "{{ $labels.slo }}: error budget is burning fast"
+          description: "The {{ $labels.slo }} SLO of {{ $labels.service }} is burning error budget at 14.4x (1h) or 6x (6h) the sustainable rate. At 14.4x the whole 30-day budget is gone in about 2 days."
+          runbook_url: "https://github.com/GauravAnand90/observability-platform/blob/main/docs/runbooks/slo-burn-fast.md"
+          dashboard_url: "http://localhost:3000/d/slo-overview?var-slo={{ $labels.slo }}"
+
+      - alert: SLOErrorBudgetBurnSlow
+        expr: |
+          (
+            slo:sli_error:ratio_rate1d > on(service, slo) (3 * slo:error_budget:ratio)
+            and on(service, slo)
+            slo:sli_error:ratio_rate2h > on(service, slo) (3 * slo:error_budget:ratio)
+          )
+          or on(service, slo)
+          (
+            slo:sli_error:ratio_rate3d > on(service, slo) (1 * slo:error_budget:ratio)
+            and on(service, slo)
+            slo:sli_error:ratio_rate6h > on(service, slo) (1 * slo:error_budget:ratio)
+          )
+        for: 15m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "{{ $labels.slo }}: error budget is burning steadily"
+          description: "The {{ $labels.slo }} SLO of {{ $labels.service }} is burning error budget at 3x (1d) or 1x (3d) the sustainable rate. Not urgent, but the budget will run out before the 30-day window ends."
+          runbook_url: "https://github.com/GauravAnand90/observability-platform/blob/main/docs/runbooks/slo-burn-slow.md"
+          dashboard_url: "http://localhost:3000/d/slo-overview?var-slo={{ $labels.slo }}"
+
+  - name: platform-alerts
+    rules:
+      # If Prometheus can't scrape the service, the SLIs go silent and no SLO
+      # alert can fire, so losing the signal is itself page-worthy.
+      - alert: CheckoutTargetDown
+        expr: up{job="checkout-api"} == 0
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: "Prometheus cannot scrape {{ $labels.instance }}"
+          description: "Scrapes of {{ $labels.job }} on {{ $labels.instance }} have failed for 2 minutes. SLO alerts for this service are blind until it's back."
+          runbook_url: "https://github.com/GauravAnand90/observability-platform/blob/main/docs/runbooks/target-down.md"
+
+      - alert: SLOSignalMissing
+        expr: absent(http_requests_total{service="checkout-api", route="/api/checkout"})
+        for: 10m
+        labels:
+          severity: ticket
+        annotations:
+          summary: "No request metrics for {{ $labels.service }} {{ $labels.route }}"
+          description: "The SLI source series does not exist. Either the service is getting no traffic or the metric was renamed; burn-rate alerts cannot fire."
+          runbook_url: "https://github.com/GauravAnand90/observability-platform/blob/main/docs/runbooks/target-down.md"

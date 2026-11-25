@@ -39,6 +39,16 @@ flowchart LR
   TEMPO --> GRAF
 ```
 
+### In action: an injected outage, end to end
+
+`make break` fails 30% of checkouts. Within minutes the SLO overview shows the error budget exhausted and the burn rate far past the 14.4x paging threshold, and `SLOErrorBudgetBurnFast` fires:
+
+![SLO overview during an injected outage: budget exhausted, 1h burn rate 181x, one firing alert](docs/images/slo-overview.png)
+
+The tail sampler kept every failing trace. One click shows the cause: `payment.authorize` returned **502 Bad Gateway**, while `inventory.reserve` succeeded. The **Request rate** and **Error ratio** buttons jump from the span to its Prometheus metrics:
+
+![Tempo trace: loadgen to checkout-api, payment.authorize span failing with 502](docs/images/error-trace.png)
+
 | Component | Role |
 |---|---|
 | [`app/`](app) | Go service with RED metrics, OpenTelemetry spans (`inventory.reserve`, `payment.authorize`, `order.persist`), and a fault-injection endpoint. The same binary runs the load generator and alert sink. |

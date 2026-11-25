@@ -1,0 +1,37 @@
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      timeInterval: 15s
+
+  - name: Tempo
+    type: tempo
+    uid: tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      # Service map built from the Collector's servicegraph metrics.
+      serviceMap:
+        datasourceUid: prometheus
+      # From a span, jump to the RED metrics of the same service.
+      # ($$ escapes $ in provisioning files; $__tags expands to service="<span's service.name>")
+      tracesToMetrics:
+        datasourceUid: prometheus
+        tags:
+          - key: service.name
+            value: service
+        queries:
+          - name: Request rate
+            query: sum(rate(http_requests_total{$$__tags}[5m]))
+          - name: Error ratio
+            query: sum(rate(http_requests_total{$$__tags, code=~"5.."}[5m])) / sum(rate(http_requests_total{$$__tags}[5m]))
+      nodeGraph:
+        enabled: true
+      search:
+        hide: false

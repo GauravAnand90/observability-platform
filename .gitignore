@@ -1,0 +1,15 @@
+# Go
+app/app
+*.test
+*.out
+
+# Python
+__pycache__/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Local secrets for real receivers (never commit)
+alertmanager/secrets/

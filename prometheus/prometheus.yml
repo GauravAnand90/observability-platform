@@ -1,0 +1,42 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 1m
+  external_labels:
+    environment: local
+
+rule_files:
+  - rules/*.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: [alertmanager:9093]
+
+scrape_configs:
+  # The service the SLOs are about. Job name is referenced by CheckoutTargetDown.
+  - job_name: checkout-api
+    static_configs:
+      - targets: [app:8080]
+
+  # RED metrics derived from traces by the Collector's spanmetrics connector.
+  # Useful for services that are traced but not instrumented for Prometheus.
+  - job_name: otel-spanmetrics
+    static_configs:
+      - targets: [otel-collector:8889]
+
+  # Monitor the monitoring: each component's own health metrics.
+  - job_name: otel-collector
+    static_configs:
+      - targets: [otel-collector:8888]
+  - job_name: prometheus
+    static_configs:
+      - targets: [localhost:9090]
+  - job_name: alertmanager
+    static_configs:
+      - targets: [alertmanager:9093]
+  - job_name: tempo
+    static_configs:
+      - targets: [tempo:3200]
+  - job_name: grafana
+    static_configs:
+      - targets: [grafana:3000]

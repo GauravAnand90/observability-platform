@@ -13,7 +13,9 @@ SVC = 'service="checkout-api",route="/api/checkout"'
 SLOS = [
     dict(name="checkout-availability", objective=0.999, budget=0.001,
          desc="99.9% of checkout requests succeed (non-5xx) over 30 days",
-         err='sum(rate(http_requests_total{%s,code=~"5.."}[{w}]))\n/\nsum(rate(http_requests_total{%s}[{w}]))' % (SVC, SVC)),
+         # "or vector(0)": until the first 5xx ever happens, the error series doesn't
+         # exist and the ratio would be empty (no data) instead of 0.
+         err='(\n  sum(rate(http_requests_total{%s,code=~"5.."}[{w}]))\n  or vector(0)\n)\n/\nsum(rate(http_requests_total{%s}[{w}]))' % (SVC, SVC)),
     dict(name="checkout-latency", objective=0.99, budget=0.01,
          desc="99% of checkout requests complete within 300ms over 30 days",
          err='1 - (\n  sum(rate(http_request_duration_seconds_bucket{%s,le="0.3"}[{w}]))\n  /\n  sum(rate(http_request_duration_seconds_count{%s}[{w}]))\n)' % (SVC, SVC)),

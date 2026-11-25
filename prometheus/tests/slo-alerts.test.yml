@@ -66,6 +66,24 @@ tests:
         alertname: SLOErrorBudgetBurnSlow
         exp_alerts: []
 
+  # A perfectly healthy service has no 5xx series at all. The SLI must read 0,
+  # not "no data", or the dashboards go blank (regression test).
+  - name: availability with zero errors reports 0 not no-data
+    interval: 1m
+    input_series:
+      - series: 'http_requests_total{service="checkout-api",route="/api/checkout",method="POST",code="200"}'
+        values: '0+100x30'
+    promql_expr_test:
+      - expr: slo:sli_error:ratio_rate5m{slo="checkout-availability"}
+        eval_time: 10m
+        exp_samples:
+          - labels: 'slo:sli_error:ratio_rate5m{service="checkout-api", slo="checkout-availability"}'
+            value: 0
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: SLOErrorBudgetBurnFast
+        exp_alerts: []
+
   # 0.5% errors = 5x burn: too slow to page, fast enough for a ticket.
   - name: availability slow burn tickets but does not page
     interval: 1m

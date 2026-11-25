@@ -29,7 +29,7 @@ make fix
 flowchart LR
   LG["loadgen<br/>20 req/s"] -->|"HTTP + traceparent"| APP["checkout-api (Go)<br/>/metrics · OTel SDK"]
   LG -. OTLP .-> COL
-  APP -. "OTLP traces" .-> COL["OpenTelemetry Collector<br/>tail sampling · spanmetrics · servicegraph"]
+  APP -. "OTLP traces" .-> COL["OpenTelemetry Collector<br/>tail sampling · span_metrics · service_graph"]
   COL -->|"sampled traces"| TEMPO[("Tempo")]
   COL -->|"derived RED + service graph metrics"| PROM
   APP -->|"scrape /metrics"| PROM[("Prometheus<br/>SLI recording rules<br/>burn-rate alerts")]
@@ -38,12 +38,6 @@ flowchart LR
   PROM --> GRAF["Grafana<br/>SLO overview · RED + traces"]
   TEMPO --> GRAF
 ```
-
-![SLO overview during an injected outage](docs/images/slo-overview.png)
-*SLO overview during an injected outage: 1h burn rate at 181×, error budget exhausted, page alert firing.*
-
-![Error trace: payment.authorize failing with 502](docs/images/error-trace.png)
-*The matching trace in Tempo: `payment.authorize` failing with a 502.*
 
 | Component | Role |
 |---|---|
@@ -79,7 +73,7 @@ A ticket is suppressed while a page fires for the same SLO. Why burn rates inste
 - The service uses the **OpenTelemetry Go SDK** with **W3C trace context**, so one trace runs from the load generator through checkout-api and its child spans.
 - Configuration is entirely through standard `OTEL_*` environment variables. The app sends OTLP to the Collector and knows nothing about Tempo.
 - The Collector's **tail sampler** decides per complete trace: **keep all errors, keep everything over 300ms, keep 10% of the rest**. Traces that explain an SLO burn are never dropped.
-- **spanmetrics** and **servicegraph** run on 100% of spans before sampling, so derived metrics and Grafana's **service map** stay accurate.
+- **span_metrics** and **service_graph** run on 100% of spans before sampling, so derived metrics and Grafana's **service map** stay accurate.
 - The **RED dashboard** places TraceQL tables of error and slow traces under the golden-signal graphs. From an alert you go to the dashboard, then the trace, then the failing span.
 
 Why SLIs stay on Prometheus-native metrics while traces use OTel: [ADR 0002](docs/adr/0002-otel-traces-prometheus-slis.md).
